@@ -1,6 +1,6 @@
 /*
  * This file is part of ltrace.
- * Copyright (C) 2011,2012 Petr Machata, Red Hat Inc.
+ * Copyright (C) 2011,2012,2013 Petr Machata, Red Hat Inc.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -169,4 +169,12 @@ vect_each(struct vect *vec, void *start_after,
 	}
 
 	return NULL;
+}
+
+const void *
+vect_each_cst(const struct vect *vec, const void *start_after,
+	      enum callback_status (*cb)(const void *, void *), void *data)
+{
+	return vect_each((struct vect *)vec, (void *)start_after,
+			 (void *)cb, data);
 }

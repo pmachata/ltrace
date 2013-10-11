@@ -55,8 +55,7 @@ static void handle_breakpoint(Event *event);
 static void handle_new(Event *event);
 
 static void callstack_push_syscall(Process *proc, int sysnum);
-static void callstack_push_symfunc(Process *proc,
-				   struct library_symbol *sym);
+static void callstack_push_symfunc(Process *proc, struct breakpoint *bp);
 /* XXX Stack maintenance should be moved to a dedicated module, or to
  * proc.c, and push/pop should be visible outside this module.  For
  * now, because we need this in proc.c, this is non-static.  */
@@ -668,7 +667,7 @@ handle_breakpoint(Event *event)
 			event->proc->stack_pointer = get_stack_pointer(event->proc);
 			event->proc->return_addr =
 				get_return_addr(event->proc, event->proc->stack_pointer);
-			callstack_push_symfunc(event->proc, sbp->libsym);
+			callstack_push_symfunc(event->proc, sbp);
 			output_left(LT_TOF_FUNCTION, event->proc, sbp->libsym);
 		}
 
@@ -707,10 +706,11 @@ callstack_push_syscall(Process *proc, int sysnum) {
 }
 
 static void
-callstack_push_symfunc(Process *proc, struct library_symbol *sym) {
+callstack_push_symfunc(Process *proc, struct breakpoint *bp) {
 	struct callstack_element *elem;
 
-	debug(DEBUG_FUNCTION, "callstack_push_symfunc(pid=%d, symbol=%s)", proc->pid, sym->name);
+	debug(DEBUG_FUNCTION, "callstack_push_symfunc(pid=%d, symbol=%s)",
+	      proc->pid, bp->libsym->name);
 	/* FIXME: not good -- should use dynamic allocation. 19990703 mortene. */
 	if (proc->callstack_depth == MAX_CALLDEPTH - 1) {
 		fprintf(stderr, "%s: Error: call nesting too deep!\n", __func__);
@@ -721,11 +721,19 @@ callstack_push_symfunc(Process *proc, struct library_symbol *sym) {
 	elem = &proc->callstack[proc->callstack_depth++];
 	*elem = (struct callstack_element){};
 	elem->is_syscall = 0;
-	elem->c_un.libfunc = sym;
+	elem->c_un.libfunc = bp->libsym;
 
-	elem->return_addr = proc->return_addr;
-	if (elem->return_addr)
-		insert_breakpoint_at(proc, elem->return_addr, NULL);
+	struct breakpoint *rbp = NULL;
+	if (breakpoint_get_return_bp(&rbp, bp, proc) == 0) {
+		struct breakpoint *ext_rbp = insert_breakpoint(proc, rbp);
+		if (ext_rbp != rbp) {
+			breakpoint_destroy(rbp);
+			free(rbp);
+			rbp = ext_rbp;
+		}
+	}
+
+	elem->return_addr = rbp != NULL ? rbp->addr : 0;
 
 	if (opt_T || options.summary) {
 		struct timezone tz;

@@ -49,6 +49,15 @@ struct bp_callbacks {
 	void (*on_hit)(struct breakpoint *bp, struct Process *proc);
 	void (*on_continue)(struct breakpoint *bp, struct Process *proc);
 	void (*on_retract)(struct breakpoint *bp, struct Process *proc);
+
+	/* Create a new breakpoint that should handle return from the
+	 * function.  BP is the breakpoint that was just hit and for
+	 * which we wish to find the corresponding return breakpoint.
+	 * This returns 0 on success (in which case *RET will have
+	 * been initialized to desired breakpoint object, or NULL if
+	 * none is necessary) or a negative value on failure.  */
+	int (*get_return_bp)(struct breakpoint **ret,
+			     struct breakpoint *bp, struct Process *proc);
 };
 
 struct breakpoint {
@@ -76,6 +85,11 @@ void breakpoint_on_continue(struct breakpoint *bp, struct Process *proc);
  * (a breakpoint has to be disabled every time that we need to execute
  * the instruction underneath it).  */
 void breakpoint_on_retract(struct breakpoint *bp, struct Process *proc);
+
+/* Call GET_RETURN_BP handler of BP, if any is set.  If none is set,
+ * call CREATE_DEFAULT_RETURN_BP to obtain one.  */
+int breakpoint_get_return_bp(struct breakpoint **ret,
+			     struct breakpoint *bp, struct Process *proc);
 
 /* Initialize a breakpoint structure.  That doesn't actually realize
  * the breakpoint.  The breakpoint is initially assumed to be
@@ -105,6 +119,10 @@ int breakpoint_turn_on(struct breakpoint *bp, struct Process *proc);
  * that it was turned on.  Returns 0 on success and a negative value
  * on failure.  */
 int breakpoint_turn_off(struct breakpoint *bp, struct Process *proc);
+
+/* Allocate and initialize a default return breakpoint.  Returns NULL
+ * on failure.  */
+struct breakpoint *create_default_return_bp(struct Process *proc);
 
 /* This allocates and initializes new breakpoint at ADDR, then calls
  * INSERT_BREAKPOINT.  Returns the new breakpoint or NULL if there are

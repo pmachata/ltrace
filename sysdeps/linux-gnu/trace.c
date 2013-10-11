@@ -328,7 +328,7 @@ ugly_workaround(struct Process *proc)
 	if (sbp != NULL)
 		enable_breakpoint(proc, sbp);
 	else
-		insert_breakpoint(proc, ip, NULL);
+		insert_breakpoint_at(proc, ip, NULL);
 	ptrace(PTRACE_CONT, proc->pid, 0, 0);
 }
 
@@ -599,7 +599,7 @@ atomic_singlestep_add_bp(void *addr, void *data)
 				.on_hit = atomic_singlestep_bp_on_hit,
 			};
 			struct breakpoint *bp
-				= insert_breakpoint(proc, addr, NULL);
+				= insert_breakpoint_at(proc, addr, NULL);
 			breakpoint_set_callbacks(bp, &cbs);
 			return 0;
 		}
@@ -1068,8 +1068,8 @@ process_vfork_on_event(struct event_handler *super, Event *event)
 				assert(sbp->libsym == NULL);
 			/* We don't mind failing that, it's not a big
 			 * deal to not display one extra vfork return.  */
-			insert_breakpoint(event->proc->parent,
-					  self->bp_addr, NULL);
+			insert_breakpoint_at(event->proc->parent,
+					     self->bp_addr, NULL);
 		}
 
 		continue_process(event->proc->parent->pid);

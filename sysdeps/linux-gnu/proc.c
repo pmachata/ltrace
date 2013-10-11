@@ -628,7 +628,7 @@ linkmap_init(struct Process *proc, arch_addr_t dyn_addr)
 	if (arch_translate_address_dyn(proc, addr, &addr) < 0)
 		return -1;
 
-	struct breakpoint *rdebug_bp = insert_breakpoint(proc, addr, NULL);
+	struct breakpoint *rdebug_bp = insert_breakpoint_at(proc, addr, NULL);
 	static struct bp_callbacks rdebug_callbacks = {
 		.on_hit = rdebug_bp_on_hit,
 	};

@@ -113,8 +113,8 @@ int breakpoint_turn_off(struct breakpoint *bp, struct Process *proc);
  * added as well as preexisting breakpoints, it then calls
  * BREAKPOINT_TURN_ON.  If anything fails, it cleans up and returns
  * NULL.  Otherwise it returns the breakpoint for ADDR.  */
-struct breakpoint *insert_breakpoint(struct Process *proc, void *addr,
-				     struct library_symbol *libsym);
+struct breakpoint *insert_breakpoint_at(struct Process *proc, void *addr,
+					struct library_symbol *libsym);
 
 /* Name of a symbol associated with BP.  May be NULL.  */
 const char *breakpoint_name(const struct breakpoint *bp);

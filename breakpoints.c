@@ -196,8 +196,8 @@ breakpoint_turn_off(struct breakpoint *bp, struct Process *proc)
 }
 
 struct breakpoint *
-insert_breakpoint(struct Process *proc, void *addr,
-		  struct library_symbol *libsym)
+insert_breakpoint_at(struct Process *proc, void *addr,
+		     struct library_symbol *libsym)
 {
 	Process *leader = proc->leader;
 
@@ -206,7 +206,8 @@ insert_breakpoint(struct Process *proc, void *addr,
 	assert(leader != NULL);
 	assert(leader->breakpoints != NULL);
 
-	debug(DEBUG_FUNCTION, "insert_breakpoint(pid=%d, addr=%p, symbol=%s)",
+	debug(DEBUG_FUNCTION,
+	      "insert_breakpoint_at(pid=%d, addr=%p, symbol=%s)",
 	      proc->pid, addr, libsym ? libsym->name : "NULL");
 
 	assert(addr != 0);

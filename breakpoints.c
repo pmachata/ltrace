@@ -199,18 +199,42 @@ struct breakpoint *
 insert_breakpoint_at(struct Process *proc, void *addr,
 		     struct library_symbol *libsym)
 {
-	Process *leader = proc->leader;
-
-	/* Only the group leader should be getting the breakpoints and
-	 * thus have ->breakpoint initialized.  */
-	assert(leader != NULL);
-	assert(leader->breakpoints != NULL);
-
 	debug(DEBUG_FUNCTION,
 	      "insert_breakpoint_at(pid=%d, addr=%p, symbol=%s)",
 	      proc->pid, addr, libsym ? libsym->name : "NULL");
 
 	assert(addr != 0);
+
+	struct breakpoint *bp = malloc(sizeof *bp);
+	if (bp == NULL || breakpoint_init(bp, proc, addr, libsym) < 0) {
+		free(bp);
+		return NULL;
+	}
+
+	/* N.B. (and XXX): BP->addr might differ from ADDR.  On ARM
+	 * this is a real possibility.  The problem here is that to
+	 * create a return breakpoint ltrace calls get_return_addr and
+	 * then insert_breakpoint_at.  So get_return_addr needs to
+	 * encode all the information necessary for breakpoint_init
+	 * into the address itself, so ADDR is potentially
+	 * mangled.  */
+
+	struct breakpoint *tmp = insert_breakpoint(proc, bp);
+	if (tmp != bp) {
+		breakpoint_destroy(bp);
+		free(bp);
+	}
+	return tmp;
+}
+
+struct breakpoint *
+insert_breakpoint(struct Process *proc, struct breakpoint *bp)
+{
+	/* Only the group leader should be getting the breakpoints and
+	 * thus have ->breakpoint initialized.  */
+	struct Process *leader = proc->leader;
+	assert(leader != NULL);
+	assert(leader->breakpoints != NULL);
 
 	/* XXX what we need to do instead is have a list of
 	 * breakpoints that are enabled at this address.  The
@@ -219,28 +243,21 @@ insert_breakpoint_at(struct Process *proc, void *addr,
 	 * will suffice, about the only realistic case where we need
 	 * to have more than one breakpoint per address is return from
 	 * a recursive library call.  */
-	struct breakpoint *sbp = dict_find_entry(leader->breakpoints, addr);
-	if (sbp == NULL) {
-		sbp = malloc(sizeof(*sbp));
-		if (sbp == NULL
-		    || breakpoint_init(sbp, proc, addr, libsym) < 0) {
-			free(sbp);
+	struct breakpoint *ext_bp
+		= dict_find_entry(leader->breakpoints, bp->addr);
+	if (ext_bp == NULL) {
+		if (proc_add_breakpoint(leader, bp) < 0)
 			return NULL;
-		}
-		if (proc_add_breakpoint(leader, sbp) < 0) {
-		fail:
-			breakpoint_destroy(sbp);
-			free(sbp);
-			return NULL;
-		}
+		ext_bp = bp;
 	}
 
-	if (breakpoint_turn_on(sbp, proc) < 0) {
-		proc_remove_breakpoint(leader, sbp);
-		goto fail;
+	if (breakpoint_turn_on(ext_bp, proc) < 0) {
+		if (ext_bp != bp)
+			proc_remove_breakpoint(leader, bp);
+		return NULL;
 	}
 
-	return sbp;
+	return ext_bp;
 }
 
 void

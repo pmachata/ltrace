@@ -67,6 +67,7 @@ struct library_symbol {
 	int delayed : 1;
 
 	struct arch_library_symbol_data arch;
+	struct os_library_symbol_data os;
 };
 
 /* Init LIBSYM.  NAME will be freed when LIBSYM is destroyed if
@@ -160,6 +161,7 @@ struct library {
 	char own_pathname : 1;
 
 	struct arch_library_data arch;
+	struct os_library_data os;
 };
 
 /* Init LIB.  */

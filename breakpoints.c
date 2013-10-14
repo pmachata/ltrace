@@ -318,29 +318,42 @@ insert_breakpoint(struct Process *proc, struct breakpoint *bp)
 }
 
 void
-delete_breakpoint(Process *proc, void *addr)
+delete_breakpoint_at(Process *proc, void *addr)
 {
-	debug(DEBUG_FUNCTION, "delete_breakpoint(pid=%d, addr=%p)", proc->pid, addr);
+	debug(DEBUG_FUNCTION, "delete_breakpoint_at(pid=%d, addr=%p)",
+	      proc->pid, addr);
 
 	Process * leader = proc->leader;
 	assert(leader != NULL);
 
-	struct breakpoint *sbp = dict_find_entry(leader->breakpoints, addr);
-	assert(sbp != NULL);
+	struct breakpoint *bp = dict_find_entry(leader->breakpoints, addr);
+	assert(bp != NULL);
 	/* This should only happen on out-of-memory conditions. */
-	if (sbp == NULL)
+	if (bp == NULL)
 		return;
 
-	if (breakpoint_turn_off(sbp, proc) < 0) {
+	if (delete_breakpoint(proc, bp) < 0) {
 		fprintf(stderr, "Couldn't turn off the breakpoint %s@%p\n",
-			breakpoint_name(sbp), sbp->addr);
-		return;
+			breakpoint_name(bp), bp->addr);
 	}
-	if (sbp->enabled == 0) {
-		proc_remove_breakpoint(leader, sbp);
-		breakpoint_destroy(sbp);
-		free(sbp);
+}
+
+int
+delete_breakpoint(struct Process *proc, struct breakpoint *bp)
+{
+	struct Process *leader = proc->leader;
+	assert(leader != NULL);
+
+	if (breakpoint_turn_off(bp, proc) < 0)
+		return -1;
+
+	if (bp->enabled == 0) {
+		proc_remove_breakpoint(leader, bp);
+		breakpoint_destroy(bp);
+		free(bp);
 	}
+
+	return 0;
 }
 
 const char *
@@ -411,7 +424,7 @@ entry_breakpoint_on_hit(struct breakpoint *a, struct Process *proc)
 	if (proc == NULL || proc->leader == NULL)
 		return;
 	arch_addr_t dyn_addr = bp->dyn_addr;
-	delete_breakpoint(proc, bp->super.addr);
+	delete_breakpoint_at(proc, bp->super.addr);
 	linkmap_init(proc, dyn_addr);
 	arch_dynlink_done(proc);
 }

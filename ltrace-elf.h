@@ -26,6 +26,9 @@
 
 #include <gelf.h>
 #include <stdlib.h>
+#include <callback.h>
+
+#include "forward.h"
 #include "sysdep.h"
 
 struct Process;
@@ -104,9 +107,21 @@ int elf_get_section_type(struct ltelf *lte, GElf_Word type,
 int elf_get_section_named(struct ltelf *lte, const char *name,
 			  Elf_Scn **tgt_sec, GElf_Shdr *tgt_shdr);
 
-/* Read, respectively, 2, 4, or 8 bytes from Elf data at given OFFSET,
- * and store it in *RETP.  Returns 0 on success or a negative value if
- * there's not enough data.  */
+/* Iterate through all symbols in LTE.  See callback.h for notes on
+ * iteration interfaces.  START_AFTER is 0 in initial call.  */
+struct elf_each_symbol_t {
+	unsigned restart;
+	int status;
+} elf_each_symbol(struct ltelf *lte, unsigned start_after,
+		  enum callback_status (*cb)(GElf_Sym *symbol,
+					     const char *name,
+					     void *data),
+		  void *data);
+
+/* Read, respectively, 1, 2, 4, or 8 bytes from Elf data at given
+ * OFFSET, and store it in *RETP.  Returns 0 on success or a negative
+ * value if there's not enough data.  */
+int elf_read_u8(Elf_Data *data, GElf_Xword offset, uint8_t *retp);
 int elf_read_u16(Elf_Data *data, GElf_Xword offset, uint16_t *retp);
 int elf_read_u32(Elf_Data *data, GElf_Xword offset, uint32_t *retp);
 int elf_read_u64(Elf_Data *data, GElf_Xword offset, uint64_t *retp);

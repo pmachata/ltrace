@@ -495,23 +495,43 @@ int
 elf_get_sym_info(struct ltelf *lte, const char *filename,
 		 size_t sym_index, GElf_Rela *rela, GElf_Sym *sym)
 {
-	int i = sym_index;
 	GElf_Rel rel;
-	void *ret;
 
 	if (lte->relplt->d_type == ELF_T_REL) {
-		ret = gelf_getrel(lte->relplt, i, &rel);
+		if (gelf_getrel(lte->relplt, sym_index, &rel) == NULL)
+			return -1;
 		rela->r_offset = rel.r_offset;
 		rela->r_info = rel.r_info;
-		rela->r_addend = 0;
-	} else {
-		ret = gelf_getrela(lte->relplt, i, rela);
+
+		Elf_Scn *sec;
+		GElf_Shdr shdr;
+		if (elf_get_section_covering(lte, rel.r_offset, &sec, &shdr) < 0
+		    || sec == NULL)
+			return -1;
+
+		Elf_Data *data = elf_loaddata(sec, &shdr);
+		if (data == NULL)
+			return -1;
+		GElf_Xword offset = rel.r_offset - shdr.sh_addr - data->d_off;
+		uint64_t value;
+		if (lte->ehdr.e_ident[EI_CLASS] == ELFCLASS32) {
+			uint32_t tmp;
+			if (elf_read_u32(data, offset, &tmp) < 0)
+				return -1;
+			value = tmp;
+		} else if (elf_read_u64(data, offset, &value) < 0) {
+			return -1;
+		}
+
+		rela->r_addend = value;
+
+	} else if (gelf_getrela(lte->relplt, sym_index, rela) == NULL) {
+		return -1;
 	}
 
-	if (ret == NULL
-	    || ELF64_R_SYM(rela->r_info) >= lte->dynsym_count
-	    || gelf_getsym(lte->dynsym, ELF64_R_SYM(rela->r_info),
-			   sym) == NULL) {
+	if (ELF64_R_SYM(rela->r_info) >= lte->dynsym_count
+	    || gelf_getsym(lte->dynsym,
+			   ELF64_R_SYM(rela->r_info), sym) == NULL) {
 		fprintf(stderr,
 			"Couldn't get relocation from \"%s\": %s\n",
 			filename, elf_errmsg(-1));

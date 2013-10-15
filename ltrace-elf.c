@@ -619,6 +619,24 @@ mark_chain_latent(struct library_symbol *libsym)
 	}
 }
 
+static void
+filter_symbol_chain(struct filter *filter,
+		    struct library_symbol **libsymp, struct library *lib)
+{
+	assert(libsymp != NULL);
+	struct library_symbol **ptr = libsymp;
+	while (*ptr != NULL) {
+		if (filter_matches_symbol(filter, (*ptr)->name, lib)) {
+			ptr = &(*ptr)->next;
+		} else {
+			struct library_symbol *sym = *ptr;
+			*ptr = (*ptr)->next;
+			library_symbol_destroy(sym);
+			free(sym);
+		}
+	}
+}
+
 static int
 populate_plt(struct Process *proc, const char *filename,
 	     struct ltelf *lte, struct library *lib,
@@ -634,30 +652,36 @@ populate_plt(struct Process *proc, const char *filename,
 
 		char const *name = lte->dynstr + sym.st_name;
 
-		/* If the symbol wasn't matched, reject it, unless we
-		 * need to keep latent PLT breakpoints for tracing
-		 * exports.  */
 		int matched = filter_matches_symbol(options.plt_filter,
 						    name, lib);
-		if (!matched && !latent_plts)
-			continue;
 
 		struct library_symbol *libsym = NULL;
 		switch (arch_elf_add_plt_entry(proc, lte, name,
 					       &rela, i, &libsym)) {
-		case plt_default:
-			if (default_elf_add_plt_entry(proc, lte, name,
-						      &rela, i, &libsym) < 0)
-			/* fall-through */
 		case plt_fail:
 				return -1;
-			/* fall-through */
+
+		case plt_default:
+			/* Add default entry to the beginning of LIBSYM.  */
+			if (default_elf_add_plt_entry(proc, lte, name,
+						      &rela, i, &libsym) < 0)
+				return -1;
+			/* Fall through.  */
 		case plt_ok:
+			/* If we didn't match the PLT entry up there,
+			 * filter the chain to only include the
+			 * matching symbols (but include all if we are
+			 * adding latent symbols).  This is to allow
+			 * arch_elf_add_plt_entry to override the PLT
+			 * symbol's name.  */
+			if (!matched && !latent_plts)
+				filter_symbol_chain(options.plt_filter,
+						    &libsym, lib);
 			if (libsym != NULL) {
 				/* If we are adding those symbols just
 				 * for tracing exports, mark them all
 				 * latent.  */
-				if (!matched)
+				if (!matched && latent_plts)
 					mark_chain_latent(libsym);
 				library_add_symbol(lib, libsym);
 			}
@@ -737,7 +761,6 @@ populate_this_symtab(struct Process *proc, const char *filename,
 			continue;
 		}
 
-		/* XXX support IFUNC as well.  */
 		if (GELF_ST_TYPE(sym.st_info) != STT_FUNC
 		    || sym.st_value == 0
 		    || sym.st_shndx == STN_UNDEF)

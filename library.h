@@ -28,6 +28,7 @@
 
 struct Process;
 struct library;
+struct Function;
 
 enum toplt {
 	LS_TOPLT_NONE = 0,	/* PLT not used for this symbol. */
@@ -51,6 +52,11 @@ struct library_symbol {
 	const char *name;
 	arch_addr_t enter_addr;
 	enum toplt plt_type;
+
+	/* If this is non-NULL, this prototype is used instead of
+	 * looking up one in LIB->protolib.  */
+	struct Function *proto;
+
 	int own_name : 1;
 
 	/* This is relevant for PLT symbols.  Latent PLT symbols are

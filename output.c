@@ -469,7 +469,7 @@ output_left(enum tof type, struct Process *proc,
 
 	account_output(&current_column, fprintf(options.output, "("));
 
-	func = name2func(function_name);
+	func = libsym->proto != NULL ? libsym->proto : name2func(function_name);
 	if (func == NULL) {
 		account_output(&current_column, fprintf(options.output, "???"));
 		return;
@@ -504,7 +504,8 @@ void
 output_right(enum tof type, struct Process *proc, struct library_symbol *libsym)
 {
 	const char *function_name = libsym->name;
-	Function *func = name2func(function_name);
+	Function *func = libsym->proto != NULL
+		? libsym->proto : name2func(function_name);
 	if (func == NULL)
 		return;
 

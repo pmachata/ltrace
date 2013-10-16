@@ -97,6 +97,25 @@ address2bpstruct(Process *proc, void *addr)
 	return dict_find_entry(proc->breakpoints, addr);
 }
 
+#ifndef OS_HAVE_BREAKPOINT_DATA
+int
+os_breakpoint_init(struct Process *proc, struct breakpoint *sbp)
+{
+	return 0;
+}
+
+void
+os_breakpoint_destroy(struct breakpoint *sbp)
+{
+}
+
+int
+os_breakpoint_clone(struct breakpoint *retp, struct breakpoint *sbp)
+{
+	return 0;
+}
+#endif
+
 #ifndef ARCH_HAVE_BREAKPOINT_DATA
 int
 arch_breakpoint_init(struct Process *proc, struct breakpoint *sbp)
@@ -136,7 +155,13 @@ breakpoint_init(struct breakpoint *bp, struct Process *proc,
 		arch_addr_t addr, struct library_symbol *libsym)
 {
 	breakpoint_init_base(bp, proc, addr, libsym);
-	return arch_breakpoint_init(proc, bp);
+	if (os_breakpoint_init(proc, bp) < 0)
+		return -1;
+	if (arch_breakpoint_init(proc, bp) < 0) {
+		os_breakpoint_destroy(bp);
+		return -1;
+	}
+	return 0;
 }
 
 void
@@ -153,6 +178,7 @@ breakpoint_destroy(struct breakpoint *bp)
 	if (bp == NULL)
 		return;
 	arch_breakpoint_destroy(bp);
+	os_breakpoint_destroy(bp);
 }
 
 int
@@ -168,8 +194,12 @@ breakpoint_clone(struct breakpoint *retp, struct Process *new_proc,
 	breakpoint_init_base(retp, new_proc, bp->addr, libsym);
 	memcpy(retp->orig_value, bp->orig_value, sizeof(bp->orig_value));
 	retp->enabled = bp->enabled;
-	if (arch_breakpoint_clone(retp, bp) < 0)
+	if (os_breakpoint_clone(retp, bp) < 0)
 		return -1;
+	if (arch_breakpoint_clone(retp, bp) < 0) {
+		os_breakpoint_destroy(retp);
+		return -1;
+	}
 	breakpoint_set_callbacks(retp, bp->cbs);
 	return 0;
 }

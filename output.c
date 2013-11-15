@@ -136,21 +136,7 @@ begin_of_line(struct process *proc, int is_func, int indent)
 	}
 }
 
-static struct arg_type_info *
-get_unknown_type(void)
-{
-	static struct arg_type_info *ret = NULL;
-	if (ret != NULL)
-		return ret;
-
-	static struct arg_type_info info;
-	info = *type_get_simple(ARGTYPE_LONG);
-	info.lens = &guess_lens;
-	ret = &info;
-	return ret;
-}
-
-/* The default prototype is: long X(long, long, long, long).  */
+/* The default prototype is: void X().  */
 static struct prototype *
 build_default_prototype(void)
 {
@@ -161,22 +147,10 @@ build_default_prototype(void)
 	static struct prototype proto;
 	prototype_init(&proto);
 
-	struct arg_type_info *unknown_type = get_unknown_type();
-	assert(unknown_type != NULL);
-	proto.return_info = unknown_type;
+	struct arg_type_info *void_type = type_get_void();
+	assert(void_type != NULL);
+	proto.return_info = void_type;
 	proto.own_return_info = 0;
-
-	struct param unknown_param;
-	param_init_type(&unknown_param, unknown_type, 0);
-
-	size_t i;
-	for (i = 0; i < 4; ++i)
-		if (prototype_push_param(&proto, &unknown_param) < 0) {
-			report_global_error("build_default_prototype: %s",
-					    strerror(errno));
-			prototype_destroy(&proto);
-			return NULL;
-		}
 
 	ret = &proto;
 	return ret;

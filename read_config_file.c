@@ -102,21 +102,10 @@ parse_arg_type(char **name, enum arg_type *ret)
 	} while (0)
 
 	KEYWORD("void", ARGTYPE_VOID);
-	KEYWORD("int", ARGTYPE_INT);
-	KEYWORD("uint", ARGTYPE_UINT);
-	KEYWORD("long", ARGTYPE_LONG);
-	KEYWORD("ulong", ARGTYPE_ULONG);
-	KEYWORD("char", ARGTYPE_CHAR);
-	KEYWORD("short", ARGTYPE_SHORT);
-	KEYWORD("ushort", ARGTYPE_USHORT);
-	KEYWORD("float", ARGTYPE_FLOAT);
-	KEYWORD("double", ARGTYPE_DOUBLE);
+	KEYWORD("integral", ARGTYPE_INTEGRAL);
+	KEYWORD("floating", ARGTYPE_FLOATING);
 	KEYWORD("array", ARGTYPE_ARRAY);
 	KEYWORD("struct", ARGTYPE_STRUCT);
-
-	/* Misspelling of int used in ltrace.conf that we used to
-	 * ship.  */
-	KEYWORD("itn", ARGTYPE_INT);
 
 	assert(rest == NULL);
 	return -1;
@@ -252,17 +241,17 @@ parse_char(struct locus *loc, char **str, char expected)
 	return 0;
 }
 
-static struct expr_node *parse_argnum(struct locus *loc,
+static struct expr_node *parse_argnum(struct protolib *plib, struct locus *loc,
 				      char **str, int *ownp, int zero);
 
 static struct expr_node *
-parse_zero(struct locus *loc, char **str, int *ownp)
+parse_zero(struct protolib *plib, struct locus *loc, char **str, int *ownp)
 {
 	eat_spaces(str);
 	if (**str == '(') {
 		++*str;
 		int own;
-		struct expr_node *arg = parse_argnum(loc, str, &own, 0);
+		struct expr_node *arg = parse_argnum(plib, loc, str, &own, 0);
 		if (arg == NULL)
 			return NULL;
 		if (parse_char(loc, str, ')') < 0) {
@@ -302,7 +291,8 @@ wrap_in_zero(struct expr_node **nodep)
  *  N      : The numeric value N
  */
 static struct expr_node *
-parse_argnum(struct locus *loc, char **str, int *ownp, int zero)
+parse_argnum(struct protolib *plib, struct locus *loc, char **str,
+	     int *ownp, int zero)
 {
 	struct expr_node *expr = malloc(sizeof(*expr));
 	if (expr == NULL)
@@ -315,7 +305,9 @@ parse_argnum(struct locus *loc, char **str, int *ownp, int zero)
 		    || check_int(loc, l) < 0)
 			goto fail;
 
-		expr_init_const_word(expr, l, type_get_simple(ARGTYPE_LONG), 0);
+		struct arg_type_info *ti
+			= protolib_lookup_basetype(plib, "ulong", true);
+		expr_init_const_word(expr, l, ti, 0);
 
 		if (zero && wrap_in_zero(&expr) < 0)
 			goto fail;
@@ -355,7 +347,8 @@ parse_argnum(struct locus *loc, char **str, int *ownp, int zero)
 
 				expr_init_up(e_up, expr_self(), 0);
 				struct arg_type_info *ti
-					= type_get_simple(ARGTYPE_LONG);
+					= protolib_lookup_basetype
+						(plib, "ulong", true);
 				expr_init_const_word(e_ix, l - 1, ti, 0);
 				expr_init_index(expr, e_up, 1, e_ix, 1);
 			}
@@ -365,7 +358,7 @@ parse_argnum(struct locus *loc, char **str, int *ownp, int zero)
 
 		} else if (strcmp(name, "zero") == 0) {
 			struct expr_node *ret
-				= parse_zero(loc, str, ownp);
+				= parse_zero(plib, loc, str, ownp);
 			if (ret == NULL)
 				goto fail_ident;
 			free(expr);
@@ -591,7 +584,7 @@ parse_string(struct protolib *plib, struct locus *loc,
 			(*str)++;
 			eat_spaces(str);
 
-			length = parse_argnum(loc, str, &own_length, 1);
+			length = parse_argnum(plib, loc, str, &own_length, 1);
 			if (length == NULL)
 				return -1;
 
@@ -635,8 +628,9 @@ parse_string(struct protolib *plib, struct locus *loc,
 			}
 			return -1;
 		}
-		type_init_array(info2, type_get_simple(ARGTYPE_CHAR), 0,
-				length, own_length);
+		struct arg_type_info *ti
+			= protolib_lookup_basetype(plib, "char", true);
+		type_init_array(info2, ti, 0, length, own_length);
 		type_init_pointer(info1, info2, 1);
 
 		info = info1;
@@ -733,9 +727,18 @@ parse_alias(struct protolib *plib, struct locus *loc,
 
 		return build_printf_pack(loc, extra_param, param_num);
 
-	} else if (try_parse_kwd(str, "enum") >=0) {
+	} else if (try_parse_kwd(str, "enum") >= 0) {
 
 		return parse_enum(plib, loc, str, retp, ownp);
+
+	} else if (try_parse_kwd(str, "itn") >= 0) {
+		/* Misspelling of int used in ltrace.conf that we used
+		 * to ship.  */
+		char buf[] = "int";
+		char *ptr = buf;
+		*retp = parse_type(plib, loc, &ptr, extra_param,
+				   param_num, ownp, NULL);
+		return *retp != NULL ? 0 : -1;
 
 	} else {
 		*retp = NULL;
@@ -764,7 +767,7 @@ parse_array(struct protolib *plib, struct locus *loc,
 
 	eat_spaces(str);
 	int own_length;
-	struct expr_node *length = parse_argnum(loc, str, &own_length, 0);
+	struct expr_node *length = parse_argnum(plib, loc, str, &own_length, 0);
 	if (length == NULL) {
 		if (own) {
 			type_destroy(elt_info);
@@ -797,7 +800,7 @@ parse_enum(struct protolib *plib, struct locus *loc, char **str,
 		if (*retp == NULL)
 			return -1;
 
-		if (!type_is_integral((*retp)->type)) {
+		if ((*retp)->type != ARGTYPE_INTEGRAL) {
 			report_error(loc->filename, loc->line_no,
 				     "integral type required as enum argument");
 		fail:
@@ -815,7 +818,7 @@ parse_enum(struct protolib *plib, struct locus *loc, char **str,
 			goto fail;
 
 	} else {
-		*retp = type_get_simple(ARGTYPE_INT);
+		*retp = protolib_lookup_basetype(plib, "int", true);
 		*ownp = 0;
 	}
 
@@ -904,31 +907,14 @@ parse_nonpointer_type(struct protolib *plib, struct locus *loc,
 		return type;
 	}
 
-	/* For some types that's all we need.  */
-	switch (type) {
-	case ARGTYPE_VOID:
-	case ARGTYPE_INT:
-	case ARGTYPE_UINT:
-	case ARGTYPE_LONG:
-	case ARGTYPE_ULONG:
-	case ARGTYPE_CHAR:
-	case ARGTYPE_SHORT:
-	case ARGTYPE_USHORT:
-	case ARGTYPE_FLOAT:
-	case ARGTYPE_DOUBLE:
+	if (type == ARGTYPE_VOID) {
 		*ownp = 0;
-		return type_get_simple(type);
-
-	case ARGTYPE_ARRAY:
-	case ARGTYPE_STRUCT:
-		break;
-
-	case ARGTYPE_POINTER:
-		/* Pointer syntax is not based on keyword, so we
-		 * should never get this type.  */
-		assert(type != ARGTYPE_POINTER);
-		abort();
+		return type_get_void();
 	}
+
+	/* Pointer syntax is not based on keyword, so we should never
+	 * get this type.  */
+	assert(type != ARGTYPE_POINTER);
 
 	struct arg_type_info *info = malloc(sizeof(*info));
 	if (info == NULL) {
@@ -944,6 +930,45 @@ parse_nonpointer_type(struct protolib *plib, struct locus *loc,
 			free(info);
 			return NULL;
 		}
+
+	} else if (type == ARGTYPE_INTEGRAL
+		   || type == ARGTYPE_FLOATING) {
+		eat_spaces(str);
+		if (parse_char(loc, str, '(') < 0)
+			goto fail;
+
+		long bits;
+		eat_spaces(str);
+		if (parse_int(loc, str, &bits) < 0)
+			goto fail;
+
+		long sign = 1;
+		if (type == ARGTYPE_INTEGRAL) {
+			eat_spaces(str);
+			if (parse_char(loc, str, ',') < 0)
+				goto fail;
+
+			eat_spaces(str);
+			if (parse_int(loc, str, &sign) < 0)
+				goto fail;
+		}
+
+		eat_spaces(str);
+		if (parse_char(loc, str, ')') < 0)
+			goto fail;
+
+		if (sign != 0 && sign != 1) {
+			report_error(loc->filename, loc->line_no,
+				     "Integral sign argument should be 0 or 1,"
+				     " not %ld.  Assuming 1.\n", sign);
+			sign = 1;
+		}
+
+		if (type == ARGTYPE_INTEGRAL)
+			type_init_integral(info, bits, sign != 0);
+		else
+			type_init_floating(info, bits);
+
 	} else {
 		assert(type == ARGTYPE_STRUCT);
 		if (parse_struct(plib, loc, str, info, forwardp) < 0)
@@ -1029,7 +1054,7 @@ parse_lens(struct protolib *plib, struct locus *loc,
 		 * backward compatibility.  */
 		if (lens == &octal_lens && **str != '(') {
 			has_args = 0;
-			info = type_get_simple(ARGTYPE_INT);
+			info = protolib_lookup_basetype(plib, "int", true);
 			*ownp = 0;
 		} else if (parse_char(loc, str, '(') < 0) {
 			report_error(loc->filename, loc->line_no,
@@ -1079,13 +1104,13 @@ static struct arg_type_info *
 get_hidden_int(void)
 {
 	static struct arg_type_info info, *pinfo = NULL;
-	if (pinfo != NULL)
-		return pinfo;
-
-	info = *type_get_simple(ARGTYPE_INT);
-	info.lens = &blind_lens;
-	pinfo = &info;
-
+	if (pinfo == NULL) {
+		/* int is 4 bytes probably everywhere where ltrace
+		 * runs, so just do the simple thing.  */
+		type_init_integral(&info, 4, true);
+		info.lens = &blind_lens;
+		pinfo = &info;
+	}
 	return pinfo;
 }
 

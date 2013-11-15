@@ -1,6 +1,6 @@
 /*
  * This file is part of ltrace.
- * Copyright (C) 2010,2011,2012 Petr Machata, Red Hat Inc.
+ * Copyright (C) 2010,2011,2012,2013 Petr Machata, Red Hat Inc.
  * Copyright (C) 2004,2008,2009 Juan Cespedes
  * Copyright (C) 2006 Ian Wienand
  *
@@ -118,26 +118,12 @@ arch_type_sizeof(struct process *proc, struct arg_type_info *info)
 	case ARGTYPE_VOID:
 		return 0;
 
-	case ARGTYPE_CHAR:
-		return 1;
+	case ARGTYPE_INTEGRAL:
+	case ARGTYPE_FLOATING:
+		return info->u.num_info.bits / 8;
 
-	case ARGTYPE_SHORT:
-	case ARGTYPE_USHORT:
-		return 2;
-
-	case ARGTYPE_INT:
-	case ARGTYPE_UINT:
-		return 4;
-
-	case ARGTYPE_LONG:
-	case ARGTYPE_ULONG:
 	case ARGTYPE_POINTER:
 		return proc->e_machine == EM_X86_64 ? 8 : 4;
-
-	case ARGTYPE_FLOAT:
-		return 4;
-	case ARGTYPE_DOUBLE:
-		return 8;
 
 	case ARGTYPE_ARRAY:
 	case ARGTYPE_STRUCT:
@@ -162,26 +148,17 @@ arch_type_alignof(struct process *proc, struct arg_type_info *info)
 		abort();
 		break;
 
-	case ARGTYPE_CHAR:
-		return 1;
+	case ARGTYPE_INTEGRAL:
+		return info->u.num_info.bits / 8;
 
-	case ARGTYPE_SHORT:
-	case ARGTYPE_USHORT:
-		return 2;
-
-	case ARGTYPE_INT:
-	case ARGTYPE_UINT:
-		return 4;
-
-	case ARGTYPE_LONG:
-	case ARGTYPE_ULONG:
 	case ARGTYPE_POINTER:
 		return proc->e_machine == EM_X86_64 ? 8 : 4;
 
-	case ARGTYPE_FLOAT:
-		return 4;
-	case ARGTYPE_DOUBLE:
-		return proc->e_machine == EM_X86_64 ? 8 : 4;
+	case ARGTYPE_FLOATING:
+		if (proc->e_machine == EM_X86_64)
+			return info->u.num_info.bits / 8;
+		else
+			return 4;
 
 	case ARGTYPE_ARRAY:
 	case ARGTYPE_STRUCT:

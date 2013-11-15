@@ -27,12 +27,15 @@
 #include <string.h>
 
 #include "printf.h"
+#include "abi.h"
+#include "expr.h"
+#include "lens_default.h"
+#include "param.h"
+#include "proc.h"
+#include "prototype.h"
 #include "type.h"
 #include "value.h"
-#include "expr.h"
 #include "zero.h"
-#include "param.h"
-#include "lens_default.h"
 
 struct param_enum {
 	struct value array;
@@ -42,6 +45,7 @@ struct param_enum {
 	char const *ptr;
 	char const *end;
 	size_t width;
+	struct protolib *abi_plib;
 };
 
 static struct param_enum *
@@ -62,18 +66,8 @@ param_printf_init(struct value *cb_args, size_t nargs,
 	 * strings) or an integral type (for wide strings).  */
 	struct arg_type_info *et
 		= cb_args->type->u.ptr_info.info->u.array_info.elt_type;
-	switch (et->type) {
-	case ARGTYPE_CHAR:
-	case ARGTYPE_SHORT:
-	case ARGTYPE_USHORT:
-	case ARGTYPE_INT:
-	case ARGTYPE_UINT:
-	case ARGTYPE_LONG:
-	case ARGTYPE_ULONG:
-		break;
-	default:
+	if (et->type != ARGTYPE_INTEGRAL)
 		return NULL;
-	}
 
 	struct param_enum *self = malloc(sizeof(*self));
 	if (self == NULL) {
@@ -105,6 +99,10 @@ param_printf_init(struct value *cb_args, size_t nargs,
 	self->ptr = self->format;
 	self->end = self->format + size;
 	self->future_length = NULL;
+
+	self->abi_plib = abi_get_protolib(proc->abi);
+	assert(self->abi_plib != NULL);
+
 	return self;
 }
 
@@ -118,99 +116,104 @@ drop_future_length(struct param_enum *self)
 }
 
 static int
-form_next_param(struct param_enum *self,
-		enum arg_type format_type, enum arg_type elt_type,
-		unsigned hlf, unsigned lng, char *len_buf, size_t len_buf_len,
-		struct arg_type_info *infop)
+simple(struct protolib *plib, const char *name,
+       struct lens *lens, struct arg_type_info *retp)
 {
-	/* XXX note: Some types are wrong because we lack
-	   ARGTYPE_LONGLONG, ARGTYPE_UCHAR and ARGTYPE_SCHAR.  */
+	*retp = *protolib_lookup_basetype(plib, name, true);
+	retp->lens = lens;
+	retp->own_lens = 0;
+	return 0;
+}
+
+static int
+integer(struct protolib *plib, unsigned hlf, unsigned lng, bool sign,
+	struct lens *lens, struct arg_type_info *retp)
+{
 	assert(lng <= 2);
 	assert(hlf <= 2);
-	static enum arg_type ints[] =
-		{ ARGTYPE_CHAR, ARGTYPE_SHORT, ARGTYPE_INT,
-		  ARGTYPE_LONG, ARGTYPE_ULONG };
-	static enum arg_type uints[] =
-		{ ARGTYPE_CHAR, ARGTYPE_USHORT, ARGTYPE_UINT,
-		  ARGTYPE_ULONG, ARGTYPE_ULONG };
+	static const char *ints[]
+		= { "schar", "short", "int", "long", "llong" };
+	static const char *uints[]
+		= { "uchar", "ushort", "uint", "ulong", "ullong" };
 
-	struct arg_type_info *elt_info = NULL;
-	if (format_type == ARGTYPE_ARRAY || format_type == ARGTYPE_POINTER)
-		elt_info = type_get_simple(elt_type);
-	else if (format_type == ARGTYPE_INT)
-		format_type = ints[2 + lng - hlf];
-	else if (format_type == ARGTYPE_UINT)
-		format_type = uints[2 + lng - hlf];
+	const char *name = (sign ? ints : uints)[2 + lng - hlf];
+	return simple(plib, name, lens, retp);
+}
 
+static int
+pointer(struct arg_type_info *elt_info, int own, struct lens *lens,
+	struct arg_type_info *retp)
+{
+	type_init_pointer(retp, elt_info, own);
 
-	if (format_type == ARGTYPE_ARRAY) {
-		struct arg_type_info *array = malloc(sizeof(*array));
-		if (array == NULL)
-			return -1;
-
-		struct expr_node *node = NULL;
-		int own_node;
-		if (len_buf_len != 0
-		    || self->future_length != NULL) {
-			struct tmp {
-				struct expr_node node;
-				struct arg_type_info type;
-			};
-			struct tmp *len = malloc(sizeof(*len));
-			if (len == NULL) {
-			fail:
-				free(len);
-				free(array);
-				return -1;
-			}
-
-			len->type = *type_get_simple(ARGTYPE_LONG);
-
-			long l;
-			if (self->future_length != NULL) {
-				l = *self->future_length;
-				drop_future_length(self);
-			} else {
-				l = atol(len_buf);
-			}
-
-			expr_init_const_word(&len->node, l, &len->type, 0);
-
-			node = build_zero_w_arg(&len->node, 1);
-			if (node == NULL)
-				goto fail;
-			own_node = 1;
-
-		} else {
-			node = expr_node_zero();
-			own_node = 0;
-		}
-		assert(node != NULL);
-
-		type_init_array(array, elt_info, 0, node, own_node);
-		type_init_pointer(infop, array, 1);
-
-	} else if (format_type == ARGTYPE_POINTER) {
-		type_init_pointer(infop, elt_info, 0);
-
-	} else {
-		*infop = *type_get_simple(format_type);
-	}
+	retp->lens = lens;
+	retp->own_lens = 0;
 
 	return 0;
 }
 
 static int
-param_printf_next(struct param_enum *self, struct arg_type_info *infop,
+array(struct param_enum *self, struct arg_type_info *elt_info,
+      char *len_buf, size_t len_buf_len, struct lens *lens,
+      struct arg_type_info *retp)
+{
+	struct arg_type_info *arr = malloc(sizeof(*arr));
+	if (arr == NULL)
+		return -1;
+
+	struct expr_node *node = NULL;
+	int own_node;
+	if (len_buf_len != 0 || self->future_length != NULL) {
+		struct tmp {
+			struct expr_node node;
+			struct arg_type_info type;
+		};
+		struct tmp *len = malloc(sizeof(*len));
+		if (len == NULL) {
+		fail:
+			free(len);
+			free(arr);
+			return -1;
+		}
+
+		type_init_integral(&len->type, sizeof(long), false);
+
+		long l;
+		if (self->future_length != NULL) {
+			l = *self->future_length;
+			drop_future_length(self);
+		} else {
+			l = atol(len_buf);
+		}
+
+		expr_init_const_word(&len->node, l, &len->type, 0);
+
+		node = build_zero_w_arg(&len->node, 1);
+		if (node == NULL)
+			goto fail;
+		own_node = 1;
+
+	} else {
+		node = expr_node_zero();
+		own_node = 0;
+	}
+	assert(node != NULL);
+
+	type_init_array(arr, elt_info, 0, node, own_node);
+	return pointer(arr, 1, lens, retp);
+}
+
+static int
+param_printf_next(struct param_enum *self, struct arg_type_info *retp,
 		  int *insert_stop)
 {
 	unsigned hlf = 0;
 	unsigned lng = 0;
-	enum arg_type format_type = ARGTYPE_VOID;
-	enum arg_type elt_type = ARGTYPE_VOID;
 	char len_buf[25] = {};
 	size_t len_buf_len = 0;
 	struct lens *lens = NULL;
+
+	struct arg_type_info *info = NULL;
 
 	for (; self->ptr < self->end; self->ptr += self->width) {
 		union {
@@ -253,8 +256,8 @@ param_printf_next(struct param_enum *self, struct arg_type_info *infop,
 
 			if (self->future_length != NULL) {
 				self->ptr += self->width;
-				format_type = ARGTYPE_INT;
-				break;
+				return integer(self->abi_plib, hlf, lng, true,
+					       lens, retp);
 			}
 
 		case '0':
@@ -298,9 +301,9 @@ param_printf_next(struct param_enum *self, struct arg_type_info *infop,
 
 		case 'd':
 		case 'i':
-			format_type = ARGTYPE_INT;
 			self->percent = 0;
-			break;
+			return integer(self->abi_plib, hlf, lng, true,
+				       lens, retp);
 
 		case 'o':
 			lens = &octal_lens;
@@ -311,43 +314,49 @@ param_printf_next(struct param_enum *self, struct arg_type_info *infop,
 			/* Fall through.  */
 		case 'u':
 		uint:
-			format_type = ARGTYPE_UINT;
 			self->percent = 0;
-			break;
+			return integer(self->abi_plib, hlf, lng, false,
+				       lens, retp);
 
 		case 'e': case 'E':
 		case 'f': case 'F':
 		case 'g': case 'G':
 		case 'a': case 'A':
-			format_type = ARGTYPE_DOUBLE;
 			self->percent = 0;
-			break;
+			return simple(self->abi_plib, "double", lens, retp);
 
-		case 'C': /* like "lc" */
-			if (lng == 0)
-				lng++;
 		case 'c':
-			/* XXX "lc" means wchar_t string.  */
-			format_type = ARGTYPE_CHAR;
-			self->percent = 0;
-			break;
+			if (lng != 0) {
+				/* "lc" means wide character.  */
+		case 'C':	/* "C" is like "lc".  */
+				self->percent = 0;
+				return simple(self->abi_plib, "wchar_t",
+					      &string_lens, retp);
+			} else {
+				self->percent = 0;
+				return simple(self->abi_plib, "char",
+					      &string_lens, retp);
+			}
 
-		case 'S': /* like "ls" */
-			if (lng == 0)
-				lng++;
 		case 's':
-			format_type = ARGTYPE_ARRAY;
-			elt_type = lng == 0 ? ARGTYPE_CHAR : ARGTYPE_INT;
+			if (lng != 0) {
+				/* "ls" means wide string.  */
+		case 'S':	/* "S" is like "ls".  */
+				info = protolib_lookup_basetype
+					(self->abi_plib, "wchar_t", true);
+			} else {
+				info = protolib_lookup_basetype
+					(self->abi_plib, "char", true);
+			}
+
 			self->percent = 0;
-			lens = &string_lens;
-			break;
+			return array(self, info, len_buf, len_buf_len,
+				     &string_lens, retp);
 
 		case 'p':
 		case 'n': /* int* where to store no. of printed chars.  */
-			format_type = ARGTYPE_POINTER;
-			elt_type = ARGTYPE_VOID;
 			self->percent = 0;
-			break;
+			return pointer(type_get_void(), 0, NULL, retp);
 
 		case 'm': /* (glibc) print argument of errno */
 		case '%':
@@ -359,21 +368,9 @@ param_printf_next(struct param_enum *self, struct arg_type_info *infop,
 		default:
 			continue;
 		}
-
-		/* If we got here, the type must have been set.  */
-		assert(format_type != ARGTYPE_VOID);
-
-		if (form_next_param(self, format_type, elt_type, hlf, lng,
-				    len_buf, len_buf_len, infop) < 0)
-			return -1;
-
-		infop->lens = lens;
-		infop->own_lens = 0;
-
-		return 0;
 	}
 
-	*infop = *type_get_simple(ARGTYPE_VOID);
+	*retp = *type_get_void();
 	return 0;
 }
 

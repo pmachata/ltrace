@@ -1,6 +1,6 @@
 /*
  * This file is part of ltrace.
- * Copyright (C) 2011,2012 Petr Machata, Red Hat Inc.
+ * Copyright (C) 2011,2012,2013 Petr Machata, Red Hat Inc.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -45,7 +45,7 @@ zero_callback_max(struct value *ret_value, struct value *lhs,
 			break;
 	}
 
-	struct arg_type_info *long_type = type_get_simple(ARGTYPE_LONG);
+	struct arg_type_info *long_type = type_get_native_long();
 	value_init_detached(ret_value, NULL, long_type, 0);
 	value_set_word(ret_value, i);
 	return 0;

@@ -110,6 +110,7 @@ struct process {
 	 * object that would provide the relevant services, instead of
 	 * checking the necessary flags in the back end ad
 	 * nauseam.  */
+	struct abi *abi;
 	short e_machine;
 	char e_class;
 

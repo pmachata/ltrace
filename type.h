@@ -22,21 +22,16 @@
 #ifndef TYPE_H
 #define TYPE_H
 
+#include <stdbool.h>
 #include <stddef.h>
+
 #include "forward.h"
 #include "vect.h"
 
 enum arg_type {
 	ARGTYPE_VOID,
-	ARGTYPE_INT,
-	ARGTYPE_UINT,
-	ARGTYPE_LONG,
-	ARGTYPE_ULONG,
-	ARGTYPE_CHAR,
-	ARGTYPE_SHORT,
-	ARGTYPE_USHORT,
-	ARGTYPE_FLOAT,
-	ARGTYPE_DOUBLE,
+	ARGTYPE_INTEGRAL,
+	ARGTYPE_FLOATING,
 	ARGTYPE_ARRAY,		/* Series of values in memory */
 	ARGTYPE_STRUCT,		/* Structure of values */
 	ARGTYPE_POINTER,	/* Pointer to some other type */
@@ -60,17 +55,29 @@ struct arg_type_info {
 			struct arg_type_info *info;
 			int own_info:1;
 		} ptr_info;
+
+		/* ARGTYPE_INTEGRAL, ARGTYPE_FLOATING */
+		struct {
+			unsigned bits;
+
+			/* Always true for ARGTYPE_FLOATING.  */
+			bool sign:1;
+		} num_info;
 	} u;
 
 	struct lens *lens;
 	int own_lens;
 };
 
-/* Return a type info for simple type TYPE (which shall not be array,
- * struct, or pointer.  Each call with the same TYPE yields the same
- * arg_type_info pointer.  */
-struct arg_type_info *type_get_simple(enum arg_type type);
+/* Returns a pointer to a simple type in a static buffer.  */
+struct arg_type_info *type_get_void(void);
 struct arg_type_info *type_get_voidptr(void);
+
+/* Returns a long native to ltrace in a static buffer.  */
+struct arg_type_info *type_get_native_long(void);
+
+void type_init_integral(struct arg_type_info *info, unsigned bits, bool sign);
+void type_init_floating(struct arg_type_info *info, unsigned bits);
 
 /* Initialize INFO so it becomes ARGTYPE_STRUCT.  The created
  * structure contains no fields.  Use type_struct_add to populate the
@@ -133,12 +140,6 @@ struct arg_type_info *type_element(struct arg_type_info *type, size_t elt);
  * arrays and structures.  Return (size_t)-1 for error.  */
 size_t type_offsetof(struct process *proc,
 		     struct arg_type_info *type, size_t elt);
-
-/* Whether TYPE is an integral type as defined by the C standard.  */
-int type_is_integral(enum arg_type type);
-
-/* Whether TYPE, which shall be integral, is a signed type.  */
-int type_is_signed(enum arg_type type);
 
 /* If INFO is floating point equivalent type, return the corresponding
  * floating point type.  Otherwise return NULL.  Floating point

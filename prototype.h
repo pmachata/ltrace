@@ -136,9 +136,17 @@ int protolib_add_type(struct protolib *plib, struct named_type *named);
 
 /* Lookup type named NAME in PLIB.  If none is found and IMPORTS is
  * true, look recursively in each of the imports.  Returns the
- * corresponding type, or NULL if none was found.  */
+ * corresponding type, or NULL if none was found.  Note that the
+ * returned OWN_TYPE field refers to whether PLIB owns the field, not
+ * the caller.  */
 struct named_type *protolib_lookup_type(struct protolib *plib,
 					const char *name, bool imports);
+
+/* Returns protolib_lookup_type(...)->info, or aborts with error
+ * message if NULL was returned by the underlying call.  It also
+ * aborts with an error message if the resolved type is a forward.  */
+struct arg_type_info *protolib_lookup_basetype(struct protolib *plib,
+					       const char *name, bool imports);
 
 /* A cache of prototype libraries.  Can load prototype libraries on
  * demand.

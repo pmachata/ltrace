@@ -29,40 +29,27 @@
 #include "lens.h"
 
 struct arg_type_info *
-type_get_simple(enum arg_type type)
+type_get_void(void)
 {
-#define HANDLE(T) {					\
-		static struct arg_type_info t = { T };	\
-	case T:						\
-		return &t;				\
-	}
+	static struct arg_type_info ret = { .type = ARGTYPE_VOID };
+	return &ret;
+}
 
-	switch (type) {
-	HANDLE(ARGTYPE_VOID)
-	HANDLE(ARGTYPE_INT)
-	HANDLE(ARGTYPE_UINT)
-	HANDLE(ARGTYPE_LONG)
-	HANDLE(ARGTYPE_ULONG)
-	HANDLE(ARGTYPE_CHAR)
-	HANDLE(ARGTYPE_SHORT)
-	HANDLE(ARGTYPE_USHORT)
-	HANDLE(ARGTYPE_FLOAT)
-	HANDLE(ARGTYPE_DOUBLE)
-
-#undef HANDLE
-
-	case ARGTYPE_ARRAY:
-	case ARGTYPE_STRUCT:
-	case ARGTYPE_POINTER:
-		assert(!"Not a simple type!");
+struct arg_type_info *
+type_get_native_long(void)
+{
+	static struct arg_type_info ret = {
+		.type = ARGTYPE_INTEGRAL,
+		.u.num_info.bits = 8 * sizeof(long),
+		.u.num_info.sign = true,
 	};
-	abort();
+	return &ret;
 }
 
 struct arg_type_info *
 type_get_voidptr(void)
 {
-	struct arg_type_info *void_info = type_get_simple(ARGTYPE_VOID);
+	struct arg_type_info *void_info = type_get_void();
 	static struct arg_type_info *ret;
 	if (ret == NULL) {
 		static struct arg_type_info ptr_info;
@@ -78,6 +65,22 @@ type_init_common(struct arg_type_info *info, enum arg_type type)
 	info->type = type;
 	info->lens = NULL;
 	info->own_lens = 0;
+}
+
+void
+type_init_integral(struct arg_type_info *info, unsigned bits, bool sign)
+{
+	type_init_common(info, ARGTYPE_INTEGRAL);
+	info->u.num_info.bits = bits;
+	info->u.num_info.sign = sign;
+}
+
+void
+type_init_floating(struct arg_type_info *info, unsigned bits)
+{
+	type_init_common(info, ARGTYPE_FLOATING);
+	info->u.num_info.bits = bits;
+	info->u.num_info.sign = true;
 }
 
 struct struct_field {
@@ -244,15 +247,8 @@ type_destroy(struct arg_type_info *info)
 		break;
 
 	case ARGTYPE_VOID:
-	case ARGTYPE_INT:
-	case ARGTYPE_UINT:
-	case ARGTYPE_LONG:
-	case ARGTYPE_ULONG:
-	case ARGTYPE_CHAR:
-	case ARGTYPE_SHORT:
-	case ARGTYPE_USHORT:
-	case ARGTYPE_FLOAT:
-	case ARGTYPE_DOUBLE:
+	case ARGTYPE_INTEGRAL:
+	case ARGTYPE_FLOATING:
 		break;
 	}
 
@@ -332,15 +328,8 @@ type_clone(struct arg_type_info *retp, const struct arg_type_info *info)
 		break;
 
 	case ARGTYPE_VOID:
-	case ARGTYPE_INT:
-	case ARGTYPE_UINT:
-	case ARGTYPE_LONG:
-	case ARGTYPE_ULONG:
-	case ARGTYPE_CHAR:
-	case ARGTYPE_SHORT:
-	case ARGTYPE_USHORT:
-	case ARGTYPE_FLOAT:
-	case ARGTYPE_DOUBLE:
+	case ARGTYPE_INTEGRAL:
+	case ARGTYPE_FLOATING:
 		*retp = *info;
 		break;
 	}
@@ -395,26 +384,9 @@ type_sizeof(struct process *proc, struct arg_type_info *type)
 
 	switch (type->type) {
 		size_t size;
-	case ARGTYPE_CHAR:
-		return sizeof(char);
-
-	case ARGTYPE_SHORT:
-	case ARGTYPE_USHORT:
-		return sizeof(short);
-
-	case ARGTYPE_INT:
-	case ARGTYPE_UINT:
-		return sizeof(int);
-
-	case ARGTYPE_LONG:
-	case ARGTYPE_ULONG:
-		return sizeof(long);
-
-	case ARGTYPE_FLOAT:
-		return sizeof(float);
-
-	case ARGTYPE_DOUBLE:
-		return sizeof(double);
+	case ARGTYPE_INTEGRAL:
+	case ARGTYPE_FLOATING:
+		return type->u.num_info.bits / 8;
 
 	case ARGTYPE_STRUCT:
 		if (layout_struct(proc, type, &size, NULL, NULL) < 0)
@@ -463,38 +435,31 @@ type_alignof(struct process *proc, struct arg_type_info *type)
 	if (arch_alignment != (size_t)-2)
 		return arch_alignment;
 
-	struct { char c; char C; } cC;
-	struct { char c; short s; } cs;
-	struct { char c; int i; } ci;
-	struct { char c; long l; } cl;
-	struct { char c; void* p; } cp;
-	struct { char c; float f; } cf;
-	struct { char c; double d; } cd;
-
-	static size_t char_alignment = alignof(C, cC);
-	static size_t short_alignment = alignof(s, cs);
-	static size_t int_alignment = alignof(i, ci);
-	static size_t long_alignment = alignof(l, cl);
-	static size_t ptr_alignment = alignof(p, cp);
-	static size_t float_alignment = alignof(f, cf);
-	static size_t double_alignment = alignof(d, cd);
+#define CONSIDER_TYPE(T)				\
+	if (type->u.num_info.bits == 8 * sizeof(T)) {	\
+		struct { char c; T t; } s;		\
+		return alignof(t, s);			\
+	}
 
 	switch (type->type) {
 		size_t alignment;
-	case ARGTYPE_LONG:
-	case ARGTYPE_ULONG:
-		return long_alignment;
-	case ARGTYPE_CHAR:
-		return char_alignment;
-	case ARGTYPE_SHORT:
-	case ARGTYPE_USHORT:
-		return short_alignment;
-	case ARGTYPE_FLOAT:
-		return float_alignment;
-	case ARGTYPE_DOUBLE:
-		return double_alignment;
+	case ARGTYPE_INTEGRAL:
+		CONSIDER_TYPE(long long);
+		CONSIDER_TYPE(long);
+		CONSIDER_TYPE(int);
+		CONSIDER_TYPE(short);
+		CONSIDER_TYPE(char);
+		break;
+
+	case ARGTYPE_FLOATING:
+		CONSIDER_TYPE(long double);
+		CONSIDER_TYPE(double);
+		CONSIDER_TYPE(float);
+		break;
+
 	case ARGTYPE_POINTER:
-		return ptr_alignment;
+		CONSIDER_TYPE(void *);
+		break;
 
 	case ARGTYPE_ARRAY:
 		return type_alignof(proc, type->u.array_info.elt_type);
@@ -504,9 +469,15 @@ type_alignof(struct process *proc, struct arg_type_info *type)
 			return (size_t)-1;
 		return alignment;
 
-	default:
-		return int_alignment;
+	case ARGTYPE_VOID:
+		assert(type->type != type->type);
+		abort();
 	}
+
+#undef CONSIDER_TYPE
+
+	assert(! "Alignment should have been handled by backend!");
+	abort();
 }
 
 size_t
@@ -579,63 +550,14 @@ type_aggregate_size(struct arg_type_info *info)
 	}
 }
 
-int
-type_is_integral(enum arg_type type)
-{
-	switch (type) {
-	case ARGTYPE_INT:
-	case ARGTYPE_UINT:
-	case ARGTYPE_LONG:
-	case ARGTYPE_ULONG:
-	case ARGTYPE_CHAR:
-	case ARGTYPE_SHORT:
-	case ARGTYPE_USHORT:
-		return 1;
-
-	case ARGTYPE_VOID:
-	case ARGTYPE_FLOAT:
-	case ARGTYPE_DOUBLE:
-	case ARGTYPE_ARRAY:
-	case ARGTYPE_STRUCT:
-	case ARGTYPE_POINTER:
-		return 0;
-	}
-	abort();
-}
-
-int
-type_is_signed(enum arg_type type)
-{
-	assert(type_is_integral(type));
-
-	switch (type) {
-	case ARGTYPE_CHAR:
-		return CHAR_MIN != 0;
-
-	case ARGTYPE_SHORT:
-	case ARGTYPE_INT:
-	case ARGTYPE_LONG:
-		return 1;
-
-	case ARGTYPE_UINT:
-	case ARGTYPE_ULONG:
-	case ARGTYPE_USHORT:
-		return 0;
-
-	case ARGTYPE_VOID:
-	case ARGTYPE_FLOAT:
-	case ARGTYPE_DOUBLE:
-	case ARGTYPE_ARRAY:
-	case ARGTYPE_STRUCT:
-	case ARGTYPE_POINTER:
-		abort();
-	}
-	abort();
-}
-
 struct arg_type_info *
 type_get_fp_equivalent(struct arg_type_info *info)
 {
+	fprintf(stderr, "type_get_fp_equivalent uses need to be checked\n");
+	/* That they don't use info->type == other->type, because that
+	 * would hold true even though the underlying bitnesses
+	 * differ.  */
+
 	/* Extract innermost structure.  Give up early if any
 	 * component has more than one element.  */
 	while (info->type == ARGTYPE_STRUCT) {
@@ -645,20 +567,13 @@ type_get_fp_equivalent(struct arg_type_info *info)
 	}
 
 	switch (info->type) {
-	case ARGTYPE_CHAR:
-	case ARGTYPE_SHORT:
-	case ARGTYPE_INT:
-	case ARGTYPE_LONG:
-	case ARGTYPE_UINT:
-	case ARGTYPE_ULONG:
-	case ARGTYPE_USHORT:
+	case ARGTYPE_INTEGRAL:
 	case ARGTYPE_VOID:
 	case ARGTYPE_ARRAY:
 	case ARGTYPE_POINTER:
 		return NULL;
 
-	case ARGTYPE_FLOAT:
-	case ARGTYPE_DOUBLE:
+	case ARGTYPE_FLOATING:
 		return info;
 
 	case ARGTYPE_STRUCT:
@@ -691,12 +606,12 @@ type_get_hfa_type(struct arg_type_info *info, size_t *countp)
 		if (emt == NULL)
 			return NULL;
 		if (ret == NULL) {
-			if (emt->type != ARGTYPE_FLOAT
-			    && emt->type != ARGTYPE_DOUBLE)
+			if (emt->type != ARGTYPE_FLOATING)
 				return NULL;
 			ret = emt;
 		}
-		if (emt->type != ret->type)
+		if (emt->type != ret->type
+		    || emt->u.num_info.bits != ret->u.num_info.bits)
 			return NULL;
 		*countp += emt_count;
 	}

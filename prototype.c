@@ -24,10 +24,11 @@
 #include <string.h>
 #include <stdio.h>
 
+#include "prototype.h"
+#include "abi.h"
 #include "common.h"
 #include "callback.h"
 #include "param.h"
-#include "prototype.h"
 #include "type.h"
 #include "options.h"
 #include "read_config_file.h"
@@ -312,6 +313,21 @@ protolib_lookup_type(struct protolib *plib, const char *name, bool imports)
 	return protolib_lookup(plib, name, &get_named_types, imports);
 }
 
+struct arg_type_info *
+protolib_lookup_basetype(struct protolib *plib, const char *name, bool imports)
+{
+	struct named_type *nt = protolib_lookup_type(plib, name, imports);
+	if (nt == NULL) {
+		fprintf(stderr, "Base type %s not found.\n", name);
+		abort();
+	}
+	if (nt->forward) {
+		fprintf(stderr, "Base type %s is a forward.\n", name);
+		abort();
+	}
+	return nt->info;
+}
+
 static void
 destroy_protolib_cb(struct protolib **plibp, void *data)
 {
@@ -470,7 +486,8 @@ protolib_cache_init(struct protolib_cache *cache, struct protolib *import)
 	 * bootstrapping.  */
 	cache->bootstrap = 1;
 
-	if (protolib_add_import(&cache->imports, &legacy_typedefs) < 0
+	if (protolib_add_import(&cache->imports, abi_get_protolib(NULL)) < 0
+	    || protolib_add_import(&cache->imports, &legacy_typedefs) < 0
 	    || (import != NULL
 		&& protolib_add_import(&cache->imports, import) < 0)
 	    || add_ltrace_conf(cache) < 0

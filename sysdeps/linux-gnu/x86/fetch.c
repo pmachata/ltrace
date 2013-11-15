@@ -196,12 +196,14 @@ allocate_x87(struct fetch_context *context, struct value *valuep,
 #endif
 		reg = &context->fpregs.st_space[0];
 		memcpy(&u.ld, reg, sizeof(u));
-		if (valuep->type->type == ARGTYPE_FLOAT)
+
+		assert(valuep->type->type == ARGTYPE_FLOATING);
+		if (valuep->type->u.num_info.bits == 32) {
 			u.f = (float)u.ld;
-		else if (valuep->type->type == ARGTYPE_DOUBLE)
+		} else {
+			assert(valuep->type->u.num_info.bits == 64);
 			u.d = (double)u.ld;
-		else
-			assert(!"Unexpected floating type!"), abort();
+		}
 
 		unsigned char *buf = value_get_raw_data(valuep);
 		memcpy(buf + offset, u.buf, sz);
@@ -463,22 +465,13 @@ classify(struct process *proc, struct fetch_context *context,
 	case ARGTYPE_VOID:
 		return 0;
 
-	case ARGTYPE_CHAR:
-	case ARGTYPE_SHORT:
-	case ARGTYPE_USHORT:
-	case ARGTYPE_INT:
-	case ARGTYPE_UINT:
-	case ARGTYPE_LONG:
-	case ARGTYPE_ULONG:
-
+	case ARGTYPE_INTEGRAL:
 	case ARGTYPE_POINTER:
-		/* and LONGLONG */
 		/* CLASS_INTEGER */
 		classes[0] = CLASS_INTEGER;
 		return 1;
 
-	case ARGTYPE_FLOAT:
-	case ARGTYPE_DOUBLE:
+	case ARGTYPE_FLOATING:
 		/* and DECIMAL, and _m64 */
 		classes[0] = CLASS_SSE;
 		return 1;
@@ -636,20 +629,13 @@ arch_fetch_retval_32(struct fetch_context *context, enum tof type,
 	case ARGTYPE_VOID:
 		return 0;
 
-	case ARGTYPE_INT:
-	case ARGTYPE_UINT:
-	case ARGTYPE_LONG:
-	case ARGTYPE_ULONG:
-	case ARGTYPE_CHAR:
-	case ARGTYPE_SHORT:
-	case ARGTYPE_USHORT:
+	case ARGTYPE_INTEGRAL:
 	case ARGTYPE_POINTER:
 		cls = allocate_integer(context, valuep, sz, 0, POOL_RETVAL);
 		assert(cls == CLASS_INTEGER);
 		return 0;
 
-	case ARGTYPE_FLOAT:
-	case ARGTYPE_DOUBLE:
+	case ARGTYPE_FLOATING:
 		cls = allocate_x87(context, valuep, sz, 0, POOL_RETVAL, 4);
 		assert(cls == CLASS_X87);
 		return 0;

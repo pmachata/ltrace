@@ -57,6 +57,7 @@
 
 READER(read_float, float)
 READER(read_double, double)
+READER(read_ldouble, long double)
 
 #undef READER
 
@@ -207,20 +208,24 @@ static int
 format_floating(FILE *stream, struct value *value, struct value_dict *arguments,
 		enum int_fmt_t format)
 {
-	switch (value->type->type) {
-		float f;
-		double d;
-	case ARGTYPE_FLOAT:
-		if (read_float(value, &f, arguments) < 0)
-			return -1;
-		return format_double(stream, f, format);
-	case ARGTYPE_DOUBLE:
-		if (read_double(value, &d, arguments) < 0)
-			return -1;
-		return format_double(stream, d, format);
-	default:
-		abort();
+	assert(value->type->type == ARGTYPE_FLOATING);
+
+#define CONSIDER_TYPE(T, CB)					\
+	if (value->type->u.num_info.bits == 8 * sizeof(T)) {	\
+		T f;						\
+		if (CB(value, &f, arguments) < 0)	\
+			return -1;				\
+		return format_double(stream, f, format);	\
 	}
+
+	CONSIDER_TYPE(long double, read_ldouble);
+	CONSIDER_TYPE(double, read_double);
+	CONSIDER_TYPE(float, read_float);
+
+#undef CONSIDER_TYPE
+
+	assert(! "Unknown floating point type!");
+	abort();
 }
 
 struct format_argument_data
@@ -401,26 +406,19 @@ toplevel_format_lens(struct lens *lens, FILE *stream,
 	case ARGTYPE_VOID:
 		return fprintf(stream, "<void>");
 
-	case ARGTYPE_SHORT:
-	case ARGTYPE_INT:
-	case ARGTYPE_LONG:
-		return format_integer(stream, value, int_fmt, arguments);
-
-	case ARGTYPE_USHORT:
-	case ARGTYPE_UINT:
-	case ARGTYPE_ULONG:
-		if (int_fmt == INT_FMT_i || int_fmt == INT_FMT_default)
-			int_fmt = INT_FMT_u;
-		return format_integer(stream, value, int_fmt, arguments);
-
-	case ARGTYPE_CHAR:
-		if (int_fmt == INT_FMT_default)
+	case ARGTYPE_INTEGRAL:
+		if (value->type->u.num_info.bits == 8
+		    && int_fmt == INT_FMT_default)
 			return format_naked(stream, value, arguments,
 					    &format_char);
+
+		if (! value->type->u.num_info.sign
+		    && (int_fmt == INT_FMT_i || int_fmt == INT_FMT_default))
+			int_fmt = INT_FMT_u;
+
 		return format_integer(stream, value, int_fmt, arguments);
 
-	case ARGTYPE_FLOAT:
-	case ARGTYPE_DOUBLE:
+	case ARGTYPE_FLOATING:
 		return format_floating(stream, value, arguments, int_fmt);
 
 	case ARGTYPE_STRUCT:
@@ -521,8 +519,7 @@ bool_lens_format_cb(struct lens *lens, FILE *stream,
 {
 	switch (value->type->type) {
 	case ARGTYPE_VOID:
-	case ARGTYPE_FLOAT:
-	case ARGTYPE_DOUBLE:
+	case ARGTYPE_FLOATING:
 	case ARGTYPE_STRUCT:
 	case ARGTYPE_POINTER:
 	case ARGTYPE_ARRAY:
@@ -530,13 +527,7 @@ bool_lens_format_cb(struct lens *lens, FILE *stream,
 					    arguments, INT_FMT_default);
 
 		int zero;
-	case ARGTYPE_SHORT:
-	case ARGTYPE_INT:
-	case ARGTYPE_LONG:
-	case ARGTYPE_USHORT:
-	case ARGTYPE_UINT:
-	case ARGTYPE_ULONG:
-	case ARGTYPE_CHAR:
+	case ARGTYPE_INTEGRAL:
 		if ((zero = value_is_zero(value, arguments)) < 0)
 			return -1;
 		if (zero)
@@ -608,14 +599,7 @@ string_lens_format_cb(struct lens *lens, FILE *stream,
 		 * I suspect people are so used to the char * C idiom,
 		 * that string(char *) might actually turn up.  So
 		 * let's just support it.  */
-		switch ((int) value->type->u.ptr_info.info->type)
-		case ARGTYPE_CHAR:
-		case ARGTYPE_SHORT:
-		case ARGTYPE_USHORT:
-		case ARGTYPE_INT:
-		case ARGTYPE_UINT:
-		case ARGTYPE_LONG:
-		case ARGTYPE_ULONG:
+		if (value->type->u.ptr_info.info->type == ARGTYPE_INTEGRAL)
 			return redispatch_as_array(lens, stream, value,
 						   arguments,
 						   &string_lens_format_cb);
@@ -624,26 +608,20 @@ string_lens_format_cb(struct lens *lens, FILE *stream,
 		 * pointee is--most likely this will again be us.  */
 		/* Fall through.  */
 	case ARGTYPE_VOID:
-	case ARGTYPE_FLOAT:
-	case ARGTYPE_DOUBLE:
+	case ARGTYPE_FLOATING:
 	case ARGTYPE_STRUCT:
 		return toplevel_format_lens(lens, stream, value,
 					    arguments, INT_FMT_default);
 
-	case ARGTYPE_SHORT:
-	case ARGTYPE_INT:
-	case ARGTYPE_LONG:
-	case ARGTYPE_USHORT:
-	case ARGTYPE_UINT:
-	case ARGTYPE_ULONG:
+	case ARGTYPE_INTEGRAL:
+		if (value->type->u.num_info.bits == 8)
+			return format_char(stream, value, arguments);
+
 		if (value->parent != NULL && value->type->lens == NULL)
 			return format_wchar(stream, value, arguments);
 		else
 			return format_naked(stream, value, arguments,
 					    &format_wchar);
-
-	case ARGTYPE_CHAR:
-		return format_char(stream, value, arguments);
 
 	case ARGTYPE_ARRAY:
 		return format_array(stream, value, arguments,

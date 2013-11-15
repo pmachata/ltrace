@@ -1,6 +1,6 @@
 /*
  * This file is part of ltrace.
- * Copyright (C) 2011,2012 Petr Machata, Red Hat Inc.
+ * Copyright (C) 2011,2012,2013 Petr Machata, Red Hat Inc.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -72,7 +72,7 @@ param_pack_init(struct param *param, struct value_dict *fargs)
 
 	/* For evaluation of argument expressions, we pass in this as
 	 * a "current" value.  */
-	struct arg_type_info *void_type = type_get_simple(ARGTYPE_VOID);
+	struct arg_type_info *void_type = type_get_void();
 	struct value void_val;
 	value_init_detached(&void_val, NULL, void_type, 0);
 

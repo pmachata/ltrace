@@ -28,12 +28,12 @@ SUBDIRS = \
 noinst_LTLIBRARIES = \
 	libltrace.la
 
-libltrace_la_SOURCES = bits.c breakpoints.c debug.c demangle.c dict.c	\
-	ltrace-elf.c execute_program.c handle_event.c libltrace.c	\
-	options.c output.c proc.c read_config_file.c summary.c		\
-	library.c filter.c glob.c type.c value.c value_dict.c expr.c	\
-	fetch.c vect.c param.c printf.c zero.c lens.c lens_default.c	\
-	lens_enum.c memstream.c prototype.c
+libltrace_la_SOURCES = abi.c bits.c breakpoints.c debug.c demangle.c	\
+	dict.c ltrace-elf.c execute_program.c handle_event.c		\
+	libltrace.c options.c output.c proc.c read_config_file.c	\
+	summary.c library.c filter.c glob.c type.c value.c		\
+	value_dict.c expr.c fetch.c vect.c param.c printf.c zero.c	\
+	lens.c lens_default.c lens_enum.c memstream.c prototype.c
 
 libltrace_la_LIBADD = \
 	$(libelf_LIBS) \
@@ -52,7 +52,7 @@ ltrace_SOURCES = \
 ltrace_LDADD = \
 	libltrace.la
 
-noinst_HEADERS = bits.h backend.h breakpoint.h common.h debug.h		\
+noinst_HEADERS = abi.h bits.h backend.h breakpoint.h common.h debug.h	\
 	defs.h demangle.h dict.h forward.h ltrace-elf.h ltrace.h	\
 	options.h output.h proc.h read_config_file.h library.h		\
 	filter.h glob.h vect.h type.h value.h value_dict.h callback.h	\

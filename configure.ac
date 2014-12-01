@@ -127,8 +127,14 @@ AC_SUBST(libstdcxx_LIBS)
 
 
 dnl Check security_get_boolean_active availability.
-AC_CHECK_HEADERS(selinux/selinux.h)
-AC_CHECK_LIB(selinux, security_get_boolean_active)
+AC_ARG_ENABLE([selinux],
+    AS_HELP_STRING([--enable-selinux],[enable SELinux support [default=auto]]),
+    [], [enable_selinux=auto])
+
+if test x$enable_selinux != xno; then
+    AC_CHECK_HEADERS(selinux/selinux.h)
+    AC_CHECK_LIB(selinux, security_get_boolean_active)
+fi
 
 dnl Whether (and which) elfutils libdw.so to use for unwinding.
 AC_ARG_WITH(elfutils,

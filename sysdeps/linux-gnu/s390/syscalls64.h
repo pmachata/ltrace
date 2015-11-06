@@ -41,7 +41,7 @@
     "lseek",   			 /* 19 */
     "getpid",  			 /* 20 */
     "mount",   			 /* 21 */
-    "oldumount",       		 /* 22 */
+    "umount",       		 /* 22 */
     "23",      			 /* 23 */
     "24",      			 /* 24 */
     "25",      			 /* 25 */
@@ -109,7 +109,7 @@
     "swapon",  			 /* 87 */
     "reboot",  			 /* 88 */
     "89",      			 /* 89 */
-    "old_mmap",			 /* 90 */
+    "mmap",			 /* 90 */
     "munmap",  			 /* 91 */
     "truncate",			 /* 92 */
     "ftruncate",       		 /* 93 */
@@ -188,7 +188,7 @@
     "166",     			 /* 166 */
     "167",     			 /* 167 */
     "poll",    			 /* 168 */
-    "nfsservctl",      		 /* 169 */
+    "169",     			 /* 169 */
     "170",     			 /* 170 */
     "171",     			 /* 171 */
     "prctl",   			 /* 172 */
@@ -287,9 +287,9 @@
     "statfs64",			 /* 265 */
     "fstatfs64",       		 /* 266 */
     "remap_file_pages",		 /* 267 */
-    "268",     			 /* 268 */
-    "269",     			 /* 269 */
-    "270",     			 /* 270 */
+    "mbind",   			 /* 268 */
+    "get_mempolicy",   		 /* 269 */
+    "set_mempolicy",   		 /* 270 */
     "mq_open", 			 /* 271 */
     "mq_unlink",       		 /* 272 */
     "mq_timedsend",    		 /* 273 */
@@ -306,7 +306,7 @@
     "inotify_init",    		 /* 284 */
     "inotify_add_watch",       	 /* 285 */
     "inotify_rm_watch",		 /* 286 */
-    "287",     			 /* 287 */
+    "migrate_pages",   		 /* 287 */
     "openat",  			 /* 288 */
     "mkdirat", 			 /* 289 */
     "mknodat", 			 /* 290 */
@@ -329,3 +329,67 @@
     "sync_file_range", 		 /* 307 */
     "tee",     			 /* 308 */
     "vmsplice",			 /* 309 */
+    "move_pages",      		 /* 310 */
+    "getcpu",  			 /* 311 */
+    "epoll_pwait",     		 /* 312 */
+    "utimes",  			 /* 313 */
+    "fallocate",       		 /* 314 */
+    "utimensat",       		 /* 315 */
+    "signalfd",			 /* 316 */
+    "317",     			 /* 317 */
+    "eventfd", 			 /* 318 */
+    "timerfd_create",  		 /* 319 */
+    "timerfd_settime", 		 /* 320 */
+    "timerfd_gettime", 		 /* 321 */
+    "signalfd4",       		 /* 322 */
+    "eventfd2",			 /* 323 */
+    "inotify_init1",   		 /* 324 */
+    "pipe2",   			 /* 325 */
+    "dup3",    			 /* 326 */
+    "epoll_create1",   		 /* 327 */
+    "preadv",  			 /* 328 */
+    "pwritev", 			 /* 329 */
+    "rt_tgsigqueueinfo",       	 /* 330 */
+    "perf_event_open", 		 /* 331 */
+    "fanotify_init",   		 /* 332 */
+    "fanotify_mark",   		 /* 333 */
+    "prlimit64",       		 /* 334 */
+    "name_to_handle_at",       	 /* 335 */
+    "open_by_handle_at",       	 /* 336 */
+    "clock_adjtime",   		 /* 337 */
+    "syncfs",  			 /* 338 */
+    "setns",   			 /* 339 */
+    "process_vm_readv",		 /* 340 */
+    "process_vm_writev",       	 /* 341 */
+    "s390_runtime_instr", 	 /* 342 */
+    "kcmp",    			 /* 343 */
+    "finit_module",    		 /* 344 */
+    "sched_setattr",   		 /* 345 */
+    "sched_getattr",   		 /* 346 */
+    "renameat2",       		 /* 347 */
+    "seccomp", 			 /* 348 */
+    "getrandom",       		 /* 349 */
+    "memfd_create",    		 /* 350 */
+    "bpf",     			 /* 351 */
+    "s390_pci_mmio_write", 	 /* 352 */
+    "s390_pci_mmio_read",  	 /* 353 */
+    "execveat",			 /* 354 */
+    "userfaultfd",     		 /* 355 */
+    "membarrier",      		 /* 356 */
+    "recvmmsg",			 /* 357 */
+    "sendmmsg",			 /* 358 */
+    "socket",  			 /* 359 */
+    "socketpair",      		 /* 360 */
+    "bind",    			 /* 361 */
+    "connect", 			 /* 362 */
+    "listen",  			 /* 363 */
+    "accept4", 			 /* 364 */
+    "getsockopt",      		 /* 365 */
+    "setsockopt",      		 /* 366 */
+    "getsockname",     		 /* 367 */
+    "getpeername",     		 /* 368 */
+    "sendto",  			 /* 369 */
+    "sendmsg", 			 /* 370 */
+    "recvfrom",			 /* 371 */
+    "recvmsg", 			 /* 372 */
+    "shutdown",			 /* 373 */

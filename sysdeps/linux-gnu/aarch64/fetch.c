@@ -173,7 +173,7 @@ static struct fetch_script
 pass_arg(struct fetch_context const *context,
 	 struct process *proc, struct arg_type_info *info)
 {
-	enum fetch_method cvt = CVT_NOP;
+	enum convert_method cvt = CVT_NOP;
 
 	size_t sz = type_sizeof(proc, info);
 	if (sz == (size_t) -1)

@@ -353,7 +353,7 @@ static void
 library_exported_names_init(struct library_exported_names *names)
 {
 	DICT_INIT(&names->names,
-		  const char*, uint64_t,
+		  char*, uint64_t,
 		  dict_hash_string, dict_eq_string, NULL);
 	DICT_INIT(&names->addrs,
 		  uint64_t, struct vect*,

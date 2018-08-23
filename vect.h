@@ -66,7 +66,7 @@ int vect_clone(struct vect *target, const struct vect *source,
 		assert(_source_vec->elt_size == sizeof(ELT_TYPE));	\
 		/* Check that callbacks are typed properly.  */		\
 		void (*_dtor_callback)(ELT_TYPE *, void *) = DTOR;	\
-		int (*_clone_callback)(ELT_TYPE *, const ELT_TYPE *,	\
+		int (*_clone_callback)(ELT_TYPE *, ELT_TYPE *,	\
 				       void *) = CLONE;			\
 		vect_clone((TGT_VEC), _source_vec,			\
 			   (int (*)(void *, const void *,		\

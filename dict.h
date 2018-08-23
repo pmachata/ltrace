@@ -90,7 +90,7 @@ int dict_clone(struct dict *target, const struct dict *source,
 		assert(_source_d->values.elt_size == sizeof(VALUE_TYPE)); \
 		/* Check that callbacks are typed properly.  */		\
 		void (*_key_dtor_cb)(KEY_TYPE *, void *) = DTOR_KEY;	\
-		int (*_key_clone_cb)(KEY_TYPE *, const KEY_TYPE *,	\
+		int (*_key_clone_cb)(KEY_TYPE *, KEY_TYPE *,	\
 				     void *) = CLONE_KEY;		\
 		void (*_value_dtor_cb)(VALUE_TYPE *, void *) = DTOR_VALUE; \
 		int (*_value_clone_cb)(VALUE_TYPE *, const VALUE_TYPE *, \

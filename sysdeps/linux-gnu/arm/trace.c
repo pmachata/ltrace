@@ -155,6 +155,8 @@ arm_get_next_pcs(struct process *proc,
 	const unsigned cond = BITS(this_instr, 28, 31);
 	const unsigned opcode = BITS(this_instr, 24, 27);
 
+	uint32_t operand1, operand2, result = 0;
+
 	if (cond == COND_NV)
 		switch (opcode) {
 			arch_addr_t addr;
@@ -170,7 +172,6 @@ arm_get_next_pcs(struct process *proc,
 		}
 	else
 		switch (opcode) {
-			uint32_t operand1, operand2, result = 0;
 		case 0x0:
 		case 0x1:			/* data processing */
 		case 0x2:
